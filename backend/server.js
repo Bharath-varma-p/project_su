@@ -4,11 +4,13 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const mysql = require('mysql2');
 
+
 const app = express();
 const port = 3001;
 
 app.use(cors());
 app.use(bodyParser.json());
+app.use('/api/ai', require('./routes/ai'));
 
 const db = mysql.createConnection({
     host: 'localhost',
