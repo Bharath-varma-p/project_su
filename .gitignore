@@ -19,3 +19,6 @@ dist/
 build/
 coverage/
 *.log
+
+
+/llama3_server/venv/
