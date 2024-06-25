@@ -1,59 +1,56 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const cors = require('cors');
-const mysql = require('mysql2');
 const axios = require('axios');
 
 const app = express();
-const port = 3002;
-
 app.use(cors());
-app.use(bodyParser.json());
-app.use('/api/ai', require('./routes/ai'));
+app.use(express.json());
 
-const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'newuser',
-    password: 'newpassword',
-    database: 'ai_startup'
-});
-
-db.connect(err => {
-    if (err) {
-        console.error('Error connecting to MySQL:', err);
-        return;
-    }
-    console.log('Connected to MySQL');
-});
-
-// Route to handle AI requests
 app.post('/api/generate', async (req, res) => {
     const { prompt } = req.body;
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+    });
 
     try {
         const response = await axios.post('http://localhost:11434/api/generate', {
             model: "llama3",
             prompt: prompt,
-            stream: false
+            stream: true
         }, {
             headers: {
                 'Authorization': `Bearer ${process.env.OLLAMA_API_KEY}`,
                 'Content-Type': 'application/json'
+            },
+            responseType: 'stream'
+        });
+
+        response.data.on('data', (chunk) => {
+            const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+            for (const line of lines) {
+                const parsed = JSON.parse(line);
+                if (parsed.response) {
+                    res.write(`data: ${JSON.stringify({ token: parsed.response })}\n\n`);
+                }
             }
         });
 
-        res.json(response.data);
+        response.data.on('end', () => {
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            res.end();
+        });
+
     } catch (error) {
         console.error('Error calling OLLAMA API:', error);
-        res.status(500).send('Error generating response');
+        res.write(`data: ${JSON.stringify({ error: 'Error generating response' })}\n\n`);
+        res.end();
     }
 });
 
-// Routes
-app.use('/api/users', require('./routes/users'));
-app.use('/api/sprints', require('./routes/sprints'));
-app.use('/api/discussions', require('./routes/discussions'));
-
+const port = 3002;
 app.listen(port, () => {
-    console.log(`Backend server is running at http://localhost:${port}`);
+    console.log(`Server running on port ${port}`);
 });
